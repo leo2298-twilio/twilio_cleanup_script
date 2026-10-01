@@ -127,4 +127,4 @@ def clean_twilio_account(dry_run=True):
         print(f"\n--- Cleanup Complete. You can review the results in {log_file_name} ---")
 
 if __name__ == "__main__":
-    clean_twilio_account(dry_run=False)
+    clean_twilio_account(dry_run=True)
