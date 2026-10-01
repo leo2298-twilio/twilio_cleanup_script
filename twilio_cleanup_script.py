@@ -66,7 +66,6 @@ def clean_twilio_account(dry_run=True):
         for account in accounts:
             print(f"\n--- Processing Account: {account.friendly_name} ---")
             sub_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, account.sid)
-
             # 1. Release unused Twilio numbers
             try:
                 phone_numbers = sub_client.incoming_phone_numbers.list()
@@ -74,13 +73,33 @@ def clean_twilio_account(dry_run=True):
                 for number in phone_numbers:
                     if number.phone_number not in numbers_to_keep:
                         if not dry_run:
+                            # STEP A: Attempt to remove the emergency address first
+                            try:
+                                sub_client.incoming_phone_numbers(number.sid).update(
+                                    emergency_address_sid=''
+                                )
+                            except TwilioRestException as update_err:
+                                error_msg = str(update_err.msg).lower()
+                                if "pending" in error_msg or "unregistration" in error_msg:
+                                    log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'PENDING', 'Emergency address unregistration already pending.')
+                                    continue # Skip delete and move to the next number
+                                else:
+                                    log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'ERROR', f"Failed to remove emergency address: {update_err.msg}")
+                                    continue # Skip delete and move to the next number
+                            
+                            # STEP B: Attempt to safely release the number
                             try:
                                 sub_client.incoming_phone_numbers(number.sid).delete()
                                 log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'SUCCESS', 'Number successfully released')
-                            except TwilioRestException as e:
-                                log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'ERROR', str(e.msg))
+                            except TwilioRestException as delete_err:
+                                error_msg = str(delete_err.msg).lower()
+                                if "pending" in error_msg or "unregistration" in error_msg or "emergency address" in error_msg:
+                                    log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'PENDING', 'Carrier is processing emergency address removal. Try deleting again later.')
+                                else:
+                                    log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'ERROR', f"Delete failed: {delete_err.msg}")
+
                         else:
-                            log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'DRY_RUN', 'Would release number')
+                            log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'DRY_RUN', 'Would remove emergency address and release number')
                     else:
                         log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Keep', 'SKIPPED', 'Protected by keep-list')
             except TwilioRestException as e:

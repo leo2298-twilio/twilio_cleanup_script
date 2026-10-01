@@ -1,6 +1,6 @@
 # Twilio Multi-Account Cleanup Script
 
-This Python script automates the cleanup of unused Twilio Incoming Phone Numbers and Messaging Services across a master account and all associated active subaccounts. It reads a keep-list from a `table.tsv` file, protects designated resources, releases unlisted phone numbers, and deletes unlisted Messaging Services. All actions and errors are logged to a timestamped CSV file for auditing.
+This Python script automates the cleanup of unused Twilio Incoming Phone Numbers and Messaging Services across a master account and all associated active subaccounts. It reads a keep-list from a `table.tsv` file, protects designated resources, safely unregisters emergency addresses (E911), releases unlisted phone numbers, and deletes unlisted Messaging Services. All actions and errors are logged to a timestamped CSV file for auditing.
 
 ---
 
@@ -8,6 +8,7 @@ This Python script automates the cleanup of unused Twilio Incoming Phone Numbers
 
 * **Multi-Account Sweeping:** Iterates through the main (parent) account and all active subaccounts automatically.
 * **TSV Keep-List Protection:** Protects specified phone numbers and Messaging Service SIDs (`MG...`) listed in `table.tsv`.
+* **Smart Emergency Address Handling:** Automatically unregisters E911 addresses before attempting to release a phone number, preventing standard Twilio deletion blocks.
 * **Automatic Cascading Cleanup:** Releasing phone numbers automatically detaches them from messaging service sender pools.
 * **CSV Audit Logging:** Exports execution details (Account Name, Resource SID, Action, Status, Error Details) to a timestamped log file (`cleanup_log_YYYYMMDD_HHMMSS.csv`) in both dry-run and live modes.
 * **Dry-Run Safety Switch:** Runs in safe simulation mode (`dry_run=True`) by default to preview deletions without making live API calls.
@@ -27,7 +28,7 @@ This Python script automates the cleanup of unused Twilio Incoming Phone Numbers
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/leo2298-twilio/twilio_cleanup_script.git
+git clone git@github.com:leo2298-twilio/twilio_cleanup_script.git
 cd twilio_cleanup_script
 ```
 
@@ -117,19 +118,21 @@ Once you have reviewed the CSV log and confirmed the actions:
    python3 twilio_cleanup.py
    ```
 
+*Note: If any numbers have emergency addresses, Twilio requires carrier processing to unregister them. These will be logged as `PENDING` in the CSV. You should re-run the script 1-24 hours later to successfully delete these pending numbers.*
+
 ---
 
 ## Log File Format
 
-The generated CSV log (`cleanup_log_YYYYMMDD_HHMMSS.csv`) contains eight columns:
+The generated CSV log (`cleanup_log_YYYYMMDD_HHMMSS.csv`) contains eight columns. Possible statuses include:
 
-| Column Header | Description |
-| :--- | :--- |
-| **Account Name** | Friendly name of the parent account or subaccount |
-| **Account SID** | Account SID (`AC...`) |
-| **Resource Type** | `Phone Number` or `Messaging Service` |
-| **Friendly Name / Number** | Phone number string or Service Friendly Name |
-| **Resource SID** | Twilio SID (`PN...` or `MG...`) |
-| **Action** | `Keep` or `Delete` |
-| **Status** | `SUCCESS`, `ERROR`, `DRY_RUN`, or `SKIPPED` |
-| **Details** | Log description or API error message |
+* **SUCCESS:** The resource was successfully deleted/released.
+* **SKIPPED:** The resource was protected by your `table.tsv` keep-list.
+* **DRY_RUN:** The action was simulated, no actual changes were made.
+* **PENDING:** Emergency address removal requires carrier processing. Re-run the script later.
+* **ERROR:** An API error occurred (details provided in the final column).
+
+| Account Name | Account SID | Resource Type | Friendly Name / Number | Resource SID | Action | Status | Details |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Main Account | AC123... | Phone Number | +14848697461 | PN123... | Delete | SUCCESS | Number successfully released |
+| Subaccount A | AC456... | Phone Number | +17208975588 | PN456... | Delete | PENDING | Carrier is processing emergency address removal... |
