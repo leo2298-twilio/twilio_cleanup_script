@@ -44,10 +44,8 @@ def clean_twilio_account(dry_run=True):
     
     with open(log_file_name, mode='w', newline='', encoding='utf-8') as log_file:
         log_writer = csv.writer(log_file)
-        # Write CSV Headers
         log_writer.writerow(['Account Name', 'Account SID', 'Resource Type', 'Friendly Name / Number', 'Resource SID', 'Action', 'Status', 'Details'])
         
-        # Helper function to log to CSV and print to console
         def log_event(acc_name, acc_sid, res_type, name_num, res_sid, action, status, details):
             log_writer.writerow([acc_name, acc_sid, res_type, name_num, res_sid, action, status, details])
             print(f"[{status}] {res_type} {name_num}: {details}")
@@ -65,7 +63,10 @@ def clean_twilio_account(dry_run=True):
         
         for account in accounts:
             print(f"\n--- Processing Account: {account.friendly_name} ---")
-            sub_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, account.sid)
+            
+            # Initialize client strictly using the specific account/subaccount's own credentials
+            sub_client = Client(account.sid, account.auth_token)
+
             # 1. Release unused Twilio numbers
             try:
                 phone_numbers = sub_client.incoming_phone_numbers.list()
@@ -82,10 +83,10 @@ def clean_twilio_account(dry_run=True):
                                 error_msg = str(update_err.msg).lower()
                                 if "pending" in error_msg or "unregistration" in error_msg:
                                     log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'PENDING', 'Emergency address unregistration already pending.')
-                                    continue # Skip delete and move to the next number
+                                    continue
                                 else:
                                     log_event(account.friendly_name, account.sid, 'Phone Number', number.phone_number, number.sid, 'Delete', 'ERROR', f"Failed to remove emergency address: {update_err.msg}")
-                                    continue # Skip delete and move to the next number
+                                    continue
                             
                             # STEP B: Attempt to safely release the number
                             try:
