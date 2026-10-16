@@ -26,7 +26,7 @@ def load_keep_lists(filepath="table.tsv"):
                 if len(num) >= 10 and not num.startswith('+'):
                     num = '+' + num
                 numbers_to_keep.add(num)
-                
+                                
     return numbers_to_keep, services_to_keep
 
 def clean_twilio_account(dry_run=True):
@@ -64,8 +64,19 @@ def clean_twilio_account(dry_run=True):
         for account in accounts:
             print(f"\n--- Processing Account: {account.friendly_name} ---")
             
-            # Initialize client strictly using the specific account/subaccount's own credentials
-            sub_client = Client(account.sid, account.auth_token)
+            # THE FIX: Explicitly fetch the subaccount to guarantee we get its Auth Token
+            try:
+                subaccount_details = master_client.api.accounts(account.sid).fetch()
+            except TwilioRestException as e:
+                print(f"ERROR fetching details for account {account.friendly_name}: {e.msg}")
+                continue
+            
+            if not subaccount_details.auth_token:
+                print(f"ERROR: Could not retrieve Auth Token for {account.friendly_name}. Skipping to prevent duplication.")
+                continue
+
+            # Initialize client strictly using the specific subaccount's own credentials
+            sub_client = Client(subaccount_details.sid, subaccount_details.auth_token)
 
             # 1. Release unused Twilio numbers
             try:
